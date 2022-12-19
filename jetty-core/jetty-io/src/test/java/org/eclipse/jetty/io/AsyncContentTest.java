@@ -165,7 +165,8 @@ public class AsyncContentTest
 
             Content.Chunk chunk = async.read();
             assertThat(successCounter.get(), is(1));
-            assertThat(chunk.isTerminal(), is(false));
+            assertThat(chunk.isLast(), is(false));
+            assertThat(chunk.hasRemaining(), is(false));
             assertThat(chunk.release(), is(true));
             assertThat(successCounter.get(), is(1));
             assertThat(failureRef.get(), is(nullValue()));
@@ -184,7 +185,8 @@ public class AsyncContentTest
 
             Content.Chunk chunk = async.read();
             assertThat(successCounter.get(), is(1));
-            assertThat(chunk.isTerminal(), is(true));
+            assertThat(chunk.isLast(), is(true));
+            assertThat(chunk.hasRemaining(), is(false));
             assertThat(chunk.release(), is(true));
             assertThat(successCounter.get(), is(1));
             assertThat(failureRef.get(), is(nullValue()));
@@ -227,11 +229,13 @@ public class AsyncContentTest
             callback.assertNoFailureNoSuccess();
 
             Content.Chunk chunk = async.read();
-            assertThat(chunk.isTerminal(), is(true));
+            assertThat(chunk.isLast(), is(true));
+            assertThat(chunk.hasRemaining(), is(false));
             callback.assertNoFailureWithSuccesses(1);
 
             chunk = async.read();
-            assertThat(chunk.isTerminal(), is(true));
+            assertThat(chunk.isLast(), is(true));
+            assertThat(chunk.hasRemaining(), is(false));
             callback.assertNoFailureWithSuccesses(0);
 
             async.write(Content.Chunk.EOF, callback);

@@ -1057,15 +1057,22 @@ public class HttpClientTest extends AbstractTest
 
     private static Content.Chunk duplicateAndRelease(Content.Chunk chunk)
     {
-        if (chunk == null || chunk.isTerminal())
-            return chunk;
-
-        ByteBuffer buffer = BufferUtil.allocate(chunk.remaining());
-        int pos = BufferUtil.flipToFill(buffer);
-        buffer.put(chunk.getByteBuffer());
-        BufferUtil.flipToFlush(buffer, pos);
-        chunk.release();
-        return Content.Chunk.from(buffer, chunk.isLast());
+        if (chunk == null)
+            return null;
+        if (chunk.hasRemaining())
+        {
+            ByteBuffer byteBuffer = BufferUtil.allocate(chunk.remaining());
+            int pos = BufferUtil.flipToFill(byteBuffer);
+            byteBuffer.put(chunk.getByteBuffer());
+            BufferUtil.flipToFlush(byteBuffer, pos);
+            chunk.release();
+            return Content.Chunk.from(byteBuffer, chunk.isLast());
+        }
+        else
+        {
+            chunk.release();
+            return chunk.isLast() ? Content.Chunk.EOF : Content.Chunk.EMPTY;
+        }
     }
 
     private static class TestProcessor extends Handler.Abstract

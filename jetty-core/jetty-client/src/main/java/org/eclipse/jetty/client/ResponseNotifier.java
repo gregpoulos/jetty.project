@@ -369,6 +369,12 @@ public class ResponseNotifier
                 }
 
                 @Override
+                public boolean canRetain()
+                {
+                    throw new UnsupportedOperationException();
+                }
+
+                @Override
                 public void retain()
                 {
                     throw new UnsupportedOperationException();
@@ -383,7 +389,7 @@ public class ResponseNotifier
                 @Override
                 public String toString()
                 {
-                    return "ALREADY_READ_CHUNK";
+                    return "AlreadyReadChunk";
                 }
             };
             private final int index;
@@ -436,8 +442,8 @@ public class ResponseNotifier
                 }
 
                 Content.Chunk result = chunk;
-                if (result != null && !result.isTerminal())
-                    chunk = ALREADY_READ_CHUNK;
+                if (result != null)
+                    chunk = result.isLast() ? Content.Chunk.next(result) : ALREADY_READ_CHUNK;
                 if (LOG.isDebugEnabled())
                     LOG.debug("Content source #{} reading current chunk {}", index, result);
                 return result;

@@ -1305,7 +1305,7 @@ public class Request implements HttpServletRequest
      */
     public void onCompleted()
     {
-        _input.releaseContent();
+        _input.consumeAll();
 
         //Clean up any tmp files created by MultiPartInputStream
         if (_multiParts != null)

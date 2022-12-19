@@ -492,9 +492,13 @@ public class Content
          * @param last whether the Chunk is the last one
          * @param retainable the Retainable this Chunk links to
          * @return a new Chunk
+         * @throws IllegalArgumentException if the {@code Retainable}
+         * {@link Retainable#canRetain() cannot be retained}
          */
         static Chunk from(ByteBuffer byteBuffer, boolean last, Retainable retainable)
         {
+            if (!retainable.canRetain())
+                throw new IllegalArgumentException("Cannot create chunk from non-retainable " + retainable);
             if (byteBuffer.hasRemaining())
                 return new ByteBufferChunk.WithRetainable(byteBuffer, last, Objects.requireNonNull(retainable));
             retainable.release();
@@ -563,11 +567,10 @@ public class Content
 
         /**
          * <p>Returns a new {@code Chunk} whose {@code ByteBuffer} is a slice of the
-         * {@code ByteBuffer} of the source {@code Chunk} unless the source
-         * {@link #hasRemaining() has no remaining byte} in which case:</p>
+         * whole {@code ByteBuffer} of the source {@code Chunk} unless the source
+         * {@link #hasRemaining() has no remaining bytes} in which case:</p>
          * <ul>
-         * <li>{@code this} is returned if it is an instance of {@link Error}</li>
-         * <li>{@link #EOF} is returned if {@link #isLast()} is {@code true}</li>
+         * <li>{@code this} is returned if {@link #isLast()} is {@code true}</li>
          * <li>{@link #EMPTY} is returned if {@link #isLast()} is {@code false}</li>
          * </ul>
          * <p>If the source has remaining bytes, the returned {@code Chunk} retains
@@ -579,22 +582,30 @@ public class Content
          */
         default Chunk slice()
         {
-            if (isTerminal())
-                return this;
-            if (!hasRemaining())
-                return EMPTY;
-            retain();
-            return from(getByteBuffer().slice(), isLast(), this);
+            if (hasRemaining())
+            {
+                retain();
+                return from(getByteBuffer().slice(), isLast(), this);
+            }
+            else
+            {
+                return isLast() ? this : EMPTY;
+            }
         }
 
         /**
          * <p>Returns a new {@code Chunk} whose {@code ByteBuffer} is a slice, with the given
          * position and limit, of the {@code ByteBuffer} of the source {@code Chunk} unless the
-         * source is {@link #isTerminal() terminal} in which case {@code this} is returned, or
-         * if {@code position == limit} in which case {@link #EOF} or {@link #EMPTY} is
+         * source {@link #hasRemaining() has no remaining bytes} in which case:</p>
+         * <ul>
+         * <li>{@code this} is returned if {@link #isLast()} is {@code true}</li>
+         * <li>{@link #EMPTY} is returned if {@link #isLast()} is {@code false}</li>
+         * </ul>
+         * <p>If {@code position == limit} then either {@link #EOF} or {@link #EMPTY} is
          * returned depending on the value of {@code last}.</p>
-         * <p>The returned {@code Chunk} retains the source {@code Chunk} and it is linked
-         * to it via {@link #from(ByteBuffer, boolean, Retainable)}.</p>
+         * <p>If the source has remaining bytes, the returned {@code Chunk} retains
+         * the source {@code Chunk} and it is linked to it via
+         * {@link #from(ByteBuffer, boolean, Retainable)}.</p>
          *
          * @param position the position at which the slice begins
          * @param limit the limit at which the slice ends
@@ -604,20 +615,25 @@ public class Content
          */
         default Chunk slice(int position, int limit, boolean last)
         {
-            if (isTerminal())
-                return this;
-            if (position == limit)
-                return last ? EOF : EMPTY;
-            ByteBuffer sourceBuffer = getByteBuffer();
-            int sourceLimit = sourceBuffer.limit();
-            sourceBuffer.limit(limit);
-            int sourcePosition = sourceBuffer.position();
-            sourceBuffer.position(position);
-            ByteBuffer slice = sourceBuffer.slice();
-            sourceBuffer.limit(sourceLimit);
-            sourceBuffer.position(sourcePosition);
-            retain();
-            return from(slice, last, this);
+            if (hasRemaining())
+            {
+                if (position == limit)
+                    return last ? EOF : EMPTY;
+                ByteBuffer sourceBuffer = getByteBuffer();
+                int sourceLimit = sourceBuffer.limit();
+                sourceBuffer.limit(limit);
+                int sourcePosition = sourceBuffer.position();
+                sourceBuffer.position(position);
+                ByteBuffer slice = sourceBuffer.slice();
+                sourceBuffer.limit(sourceLimit);
+                sourceBuffer.position(sourcePosition);
+                retain();
+                return from(slice, last, this);
+            }
+            else
+            {
+                return isLast() ? this : EMPTY;
+            }
         }
 
         /**
@@ -662,6 +678,8 @@ public class Content
          */
         default int skip(int length)
         {
+            if (length == 0)
+                return 0;
             ByteBuffer byteBuffer = getByteBuffer();
             length = Math.min(byteBuffer.remaining(), length);
             byteBuffer.position(byteBuffer.position() + length);
@@ -718,6 +736,12 @@ public class Content
             public boolean isLast()
             {
                 return true;
+            }
+
+            @Override
+            public boolean canRetain()
+            {
+                return false;
             }
 
             @Override

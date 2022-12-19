@@ -23,6 +23,7 @@ import java.util.Objects;
 import java.util.Queue;
 
 import org.eclipse.jetty.io.Content;
+import org.eclipse.jetty.io.Retainable;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.thread.AutoLock;
 import org.eclipse.jetty.util.thread.SerializedInvoker;
@@ -93,25 +94,19 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      */
     public void write(Content.Chunk chunk, Callback callback)
     {
-        // Non-empty, chunks have to be wrapped to bind the succeeding
-        // of the callback to the release of the chunk. Empty chunks
-        // cannot be wrapped, so the callback is succeeded in read()
-        // for them.
-        Content.Chunk c;
-        if (chunk.isTerminal())
+        Content.Chunk c = chunk;
+        if (c.canRetain())
         {
-            c = chunk;
-        }
-        else if (!chunk.hasRemaining())
-        {
-            c = Content.Chunk.EMPTY;
-        }
-        else
-        {
-            c = Content.Chunk.from(chunk.getByteBuffer(), chunk.isLast(), () ->
+            c = Content.Chunk.from(chunk.getByteBuffer(), chunk.isLast(), new Retainable.Wrapper(c)
             {
-                chunk.release();
-                callback.succeeded();
+                @Override
+                public boolean release()
+                {
+                    boolean released = super.release();
+                    if (released)
+                        callback.succeeded();
+                    return released;
+                }
             });
         }
         offer(c, callback);
@@ -124,6 +119,8 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      */
     private void offer(Content.Chunk chunk, Callback callback)
     {
+        // TODO: if chunk is error, fail immediately with IAE and return.
+
         Throwable failure = null;
         boolean wasEmpty = false;
         try (AutoLock ignored = lock.lock())
@@ -138,6 +135,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
             }
             else if (chunk instanceof Content.Chunk.Error error)
             {
+                writeClosed = true;
                 errorChunk = error;
                 failure = errorChunk.getCause();
                 wasEmpty = chunks.isEmpty();
@@ -178,7 +176,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
                     if (writeClosed && chunks.size() == 1)
                     {
                         Content.Chunk chunk = chunks.peek().chunk();
-                        if (chunk.isTerminal())
+                        if (chunk.isLast() && !chunk.hasRemaining())
                             return;
                     }
                     l.await();
@@ -235,7 +233,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
             if (chunks.isEmpty())
                 l.signal();
         }
-        if (!current.chunk().hasRemaining())
+        if (!current.chunk().canRetain())
             current.callback().succeeded();
         return current.chunk();
     }
