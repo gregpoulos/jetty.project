@@ -976,13 +976,10 @@ public class HttpConnection extends AbstractConnection implements Runnable, Writ
             if (stream == null || stream._chunk != null || _retainableByteBuffer == null)
                 throw new IllegalStateException();
 
-            _retainableByteBuffer.retain();
-
             if (LOG.isDebugEnabled())
                 LOG.debug("content {}/{} for {}", BufferUtil.toDetailString(buffer), _retainableByteBuffer, HttpConnection.this);
 
-            RetainableByteBuffer retainable = _retainableByteBuffer;
-            stream._chunk = Content.Chunk.from(buffer, false, new ChunkRetainable(retainable, buffer));
+            stream._chunk = Content.Chunk.from(buffer, false, new ChunkRetainable(_retainableByteBuffer, buffer));
             return true;
         }
 

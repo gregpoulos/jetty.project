@@ -631,20 +631,20 @@ public class MultiPart
                     Content.Chunk chunk = part.getContent().read();
                     if (chunk == null || chunk instanceof Content.Chunk.Error)
                         yield chunk;
-                    if (chunk.isLast())
+                    if (!chunk.isLast())
+                        yield chunk;
+                    state = State.MIDDLE;
+                    if (chunk.hasRemaining())
                     {
-                        if (!chunk.hasRemaining())
-                        {
-                            chunk.release();
-                            chunk = Content.Chunk.EMPTY;
-                        }
-                        else
-                        {
-                            chunk = Content.Chunk.from(chunk.getByteBuffer(), false, chunk);
-                        }
-                        state = State.MIDDLE;
+                        Content.Chunk wrapped = Content.Chunk.from(chunk.getByteBuffer(), false, chunk);
+                        chunk.release();
+                        yield wrapped;
                     }
-                    yield chunk;
+                    else
+                    {
+                        chunk.release();
+                        yield Content.Chunk.EMPTY;
+                    }
                 }
                 case COMPLETE -> Content.Chunk.EOF;
             };
@@ -1190,11 +1190,15 @@ public class MultiPart
                     if (crContent)
                     {
                         crContent = false;
-                        notifyPartContent(Content.Chunk.from(CR.slice(), false));
+                        Content.Chunk partContentChunk = Content.Chunk.from(CR.slice(), false);
+                        notifyPartContent(partContentChunk);
+                        partContentChunk.release();
                     }
                     ByteBuffer content = ByteBuffer.wrap(boundaryFinder.getPattern(), 0, partialBoundaryMatch);
                     partialBoundaryMatch = 0;
-                    notifyPartContent(Content.Chunk.from(content, false));
+                    Content.Chunk partContentChunk = Content.Chunk.from(content, false);
+                    notifyPartContent(partContentChunk);
+                    partContentChunk.release();
                     return false;
                 }
             }

@@ -308,6 +308,7 @@ public class ResponseNotifier
             {
                 demultiplexerContentSource.onChunk(chunk);
             }
+            chunk.release();
         }
 
         private void registerFailure(Throwable failure)

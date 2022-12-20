@@ -484,9 +484,9 @@ public class Content
         }
 
         /**
-         * <p>Creates a last/non-last Chunk with the given ByteBuffer, linked to the given Retainable.</p>
-         * <p>The {@link #retain()} and {@link #release()} methods of this Chunk will delegate to the
-         * given Retainable.</p>
+         * <p>Creates a last/non-last Chunk with the given ByteBuffer, linked to the given {@link Retainable}.</p>
+         * <p>The given Retainable is retained, and the {@link #retain()} and {@link #release()} methods of
+         * this Chunk will delegate to the given Retainable.</p>
          *
          * @param byteBuffer the ByteBuffer with the bytes of this Chunk
          * @param last whether the Chunk is the last one
@@ -499,10 +499,10 @@ public class Content
         {
             if (!retainable.canRetain())
                 throw new IllegalArgumentException("Cannot create chunk from non-retainable " + retainable);
-            if (byteBuffer.hasRemaining())
-                return new ByteBufferChunk.WithRetainable(byteBuffer, last, Objects.requireNonNull(retainable));
-            retainable.release();
-            return last ? EOF : EMPTY;
+            if (!byteBuffer.hasRemaining())
+                return last ? EOF : EMPTY;
+            retainable.retain();
+            return new ByteBufferChunk.WithRetainable(byteBuffer, last, Objects.requireNonNull(retainable));
         }
 
         /**
@@ -583,14 +583,9 @@ public class Content
         default Chunk slice()
         {
             if (hasRemaining())
-            {
-                retain();
                 return from(getByteBuffer().slice(), isLast(), this);
-            }
             else
-            {
                 return isLast() ? this : EMPTY;
-            }
         }
 
         /**
@@ -627,7 +622,6 @@ public class Content
                 ByteBuffer slice = sourceBuffer.slice();
                 sourceBuffer.limit(sourceLimit);
                 sourceBuffer.position(sourcePosition);
-                retain();
                 return from(slice, last, this);
             }
             else
@@ -684,25 +678,6 @@ public class Content
             length = Math.min(byteBuffer.remaining(), length);
             byteBuffer.position(byteBuffer.position() + length);
             return length;
-        }
-
-        /**
-         * <p>Returns whether this Chunk is a <em>terminal</em> chunk.</p>
-         * <p>A terminal chunk is a Chunk that {@link #isLast()} is true
-         * and has no remaining bytes.</p>
-         * <p><em>Terminal</em> chunks cannot be lifecycled using the
-         * {@link Retainable} contract like other chunks: they always throw
-         * {@link UnsupportedOperationException} on {@link #retain()} and
-         * always return {@code true} on {@link #release()}. As such, they
-         * cannot contain a recyclable buffer and calling their
-         * {@link #release()} method isn't necessary, although harmless.
-         * </p>
-         *
-         * @return whether this Chunk is a terminal chunk
-         */
-        default boolean isTerminal()
-        {
-            return isLast() && !hasRemaining();
         }
 
         /**

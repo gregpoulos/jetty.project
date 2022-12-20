@@ -54,22 +54,13 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      * <ul>
      * <li>immediately with a failure when this instance is closed or already in error</li>
      * <li>successfully when the {@link Content.Chunk} returned by {@link #read()} is released</li>
-     * <li>successfully just before the {@link Content.Chunk} is returned if the latter {@link Content.Chunk#hasRemaining() has no remaining byte}</li>
+     * <li>successfully just before the {@link Content.Chunk} is returned by {@link #read()},
+     * if the chunk {@link Content.Chunk#canRetain() cannot be retained}</li>
      * </ul>
      */
     @Override
     public void write(boolean last, ByteBuffer byteBuffer, Callback callback)
     {
-        // Since the contract is that the callback has to be succeeded when
-        // the chunk returned by read() is released, and since it is not
-        // possible to create chunks with no remaining byte, when the byte
-        // buffer is empty we need to replace it with EOF / EMPTY and cannot
-        // be notified about the release of the latter two.
-        // This is why read() succeeds the callback if it has no remaining
-        // byte, meaning it is either EOF or EMPTY. The callback is succeeded
-        // once and only once, but that happens either during read() if the
-        // byte buffer is empty or during Chunk.release() if it contains at
-        // least one byte.
         Content.Chunk chunk;
         if (byteBuffer.hasRemaining())
             chunk = Content.Chunk.from(byteBuffer, last, callback::succeeded);
@@ -86,7 +77,8 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      * <li>immediately with a failure when this instance is closed or already in error</li>
      * <li>immediately with a failure when the written chunk is an instance of {@link Content.Chunk.Error}</li>
      * <li>successfully when the {@link Content.Chunk} returned by {@link #read()} is released</li>
-     * <li>successfully just before the {@link Content.Chunk} is returned if the latter {@link Content.Chunk#hasRemaining() has no remaining byte}</li>
+     * <li>successfully just before the {@link Content.Chunk} is returned by {@link #read()},
+     * if the chunk {@link Content.Chunk#canRetain() cannot be retained}</li>
      * </ul>
      *
      * @param chunk the Content.Chunk to write
@@ -94,10 +86,10 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      */
     public void write(Content.Chunk chunk, Callback callback)
     {
-        Content.Chunk c = chunk;
-        if (c.canRetain())
+        if (chunk.canRetain())
         {
-            c = Content.Chunk.from(chunk.getByteBuffer(), chunk.isLast(), new Retainable.Wrapper(c)
+            // Implicit retain that will be paired with the release done by the reader.
+            chunk = Content.Chunk.from(chunk.getByteBuffer(), chunk.isLast(), new Retainable.Wrapper(chunk)
             {
                 @Override
                 public boolean release()
@@ -109,7 +101,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
                 }
             });
         }
-        offer(c, callback);
+        offer(chunk, callback);
     }
 
     /**
@@ -119,7 +111,11 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
      */
     private void offer(Content.Chunk chunk, Callback callback)
     {
-        // TODO: if chunk is error, fail immediately with IAE and return.
+        if (chunk instanceof Content.Chunk.Error)
+        {
+            callback.failed(new IllegalArgumentException("Cannot not write Chunk.Error instances, call fail(Throwable) instead"));
+            return;
+        }
 
         Throwable failure = null;
         boolean wasEmpty = false;
@@ -132,13 +128,6 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
             else if (errorChunk != null)
             {
                 failure = errorChunk.getCause();
-            }
-            else if (chunk instanceof Content.Chunk.Error error)
-            {
-                writeClosed = true;
-                errorChunk = error;
-                failure = errorChunk.getCause();
-                wasEmpty = chunks.isEmpty();
             }
             else
             {
@@ -160,32 +149,29 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
 
     public void flush() throws IOException
     {
-        try (AutoLock.WithCondition l = lock.lock())
+        try (AutoLock.WithCondition condition = lock.lock())
         {
-            try
+            while (true)
             {
-                while (true)
+                // Always wrap the exception to make sure
+                // the stack trace comes from flush().
+                if (errorChunk != null)
+                    throw new IOException(errorChunk.getCause());
+                if (chunks.isEmpty())
+                    return;
+                // Special case for a last empty chunk that may not be read.
+                if (writeClosed && chunks.size() == 1)
                 {
-                    // Always wrap the exception to make sure
-                    // the stack trace comes from flush().
-                    if (errorChunk != null)
-                        throw new IOException(errorChunk.getCause());
-                    if (chunks.isEmpty())
+                    Content.Chunk chunk = chunks.peek().chunk();
+                    if (chunk.isLast() && !chunk.hasRemaining())
                         return;
-                    // Special case for a last empty chunk that may not be read.
-                    if (writeClosed && chunks.size() == 1)
-                    {
-                        Content.Chunk chunk = chunks.peek().chunk();
-                        if (chunk.isLast() && !chunk.hasRemaining())
-                            return;
-                    }
-                    l.await();
                 }
+                condition.await();
             }
-            catch (InterruptedException x)
-            {
-                throw new InterruptedIOException();
-            }
+        }
+        catch (InterruptedException x)
+        {
+            throw new InterruptedIOException();
         }
     }
 
@@ -216,7 +202,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
     public Content.Chunk read()
     {
         ChunkCallback current;
-        try (AutoLock.WithCondition l = lock.lock())
+        try (AutoLock.WithCondition condition = lock.lock())
         {
             if (length == UNDETERMINED_LENGTH)
                 length = -1;
@@ -231,7 +217,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
             }
             readClosed = current.chunk().isLast();
             if (chunks.isEmpty())
-                l.signal();
+                condition.signal();
         }
         if (!current.chunk().canRetain())
             current.callback().succeeded();
@@ -281,7 +267,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
     public void fail(Throwable failure)
     {
         List<ChunkCallback> drained;
-        try (AutoLock ignored = lock.lock())
+        try (AutoLock.WithCondition condition = lock.lock())
         {
             if (readClosed)
                 return;
@@ -290,6 +276,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
             errorChunk = Content.Chunk.from(failure);
             drained = List.copyOf(chunks);
             chunks.clear();
+            condition.signal();
         }
         drained.forEach(cc -> cc.callback().failed(failure));
         invoker.run(this::invokeDemandCallback);

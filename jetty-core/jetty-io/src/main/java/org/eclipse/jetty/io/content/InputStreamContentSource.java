@@ -82,24 +82,28 @@ public class InputStreamContentSource implements Content.Source
                 return Content.Chunk.EOF;
         }
 
+        RetainableByteBuffer streamBuffer = bufferPool.acquire(getBufferSize(), false);
         try
         {
-            RetainableByteBuffer streamBuffer = bufferPool.acquire(getBufferSize(), false);
             ByteBuffer buffer = streamBuffer.getBuffer();
             int read = inputStream.read(buffer.array(), buffer.arrayOffset(), buffer.capacity());
             if (read < 0)
             {
+                streamBuffer.release();
                 close();
                 return Content.Chunk.EOF;
             }
             else
             {
                 buffer.limit(read);
-                return Content.Chunk.from(buffer, false, streamBuffer);
+                Content.Chunk chunk = Content.Chunk.from(buffer, false, streamBuffer);
+                streamBuffer.release();
+                return chunk;
             }
         }
         catch (Throwable x)
         {
+            streamBuffer.release();
             return failure(x);
         }
     }

@@ -483,7 +483,6 @@ public class HttpConnectionOverFCGI extends AbstractConnection implements IConne
                     HttpChannelOverFCGI channel = HttpConnectionOverFCGI.this.channel;
                     if (channel != null)
                     {
-                        networkBuffer.retain();
                         Content.Chunk chunk = Content.Chunk.from(buffer, false, networkBuffer);
                         if (getAndSetAction(() -> channel.content(chunk)) != null)
                             throw new IllegalStateException();

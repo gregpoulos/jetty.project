@@ -62,7 +62,9 @@ public class HttpReceiverOverHTTP3 extends HttpReceiver implements Stream.Client
         boolean last = !byteBuffer.hasRemaining() && data.isLast();
         if (last)
             responseSuccess(getHttpExchange(), null);
-        return Content.Chunk.from(byteBuffer, last, data);
+        Content.Chunk chunk = Content.Chunk.from(byteBuffer, last, data);
+        data.release();
+        return chunk;
     }
 
     @Override

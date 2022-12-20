@@ -276,7 +276,6 @@ class AsyncContentProducer implements ContentProducer
                 {
                     if (LOG.isDebugEnabled())
                         LOG.debug("current chunk depleted {}", this);
-
                     _chunk.release();
                     _chunk = null;
                 }
