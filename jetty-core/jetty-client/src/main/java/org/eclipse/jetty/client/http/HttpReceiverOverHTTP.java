@@ -449,8 +449,7 @@ public class HttpReceiverOverHTTP extends HttpReceiver implements HttpParser.Res
         if (chunk != null)
             throw new IllegalStateException("Content generated with unconsumed content left");
 
-        RetainableByteBuffer networkBuffer = this.networkBuffer;
-        chunk = Content.Chunk.from(buffer, false, networkBuffer);
+        chunk = Content.Chunk.retainAndCreate(buffer, false, networkBuffer);
         if (LOG.isDebugEnabled())
             LOG.debug("Setting action to responseContentAvailable on {}", this);
         if (getAndSetAction(this::responseContentAvailable) != null)

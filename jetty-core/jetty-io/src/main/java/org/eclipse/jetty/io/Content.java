@@ -485,8 +485,8 @@ public class Content
 
         /**
          * <p>Creates a last/non-last Chunk with the given ByteBuffer, linked to the given {@link Retainable}.</p>
-         * <p>The given Retainable is retained, and the {@link #retain()} and {@link #release()} methods of
-         * this Chunk will delegate to the given Retainable.</p>
+         * <p>The {@link #retain()} and {@link #release()} methods of this Chunk will delegate to the given Retainable.</p>
+         * <p>Use this method when the Retainable is already retained.</p>
          *
          * @param byteBuffer the ByteBuffer with the bytes of this Chunk
          * @param last whether the Chunk is the last one
@@ -494,8 +494,33 @@ public class Content
          * @return a new Chunk
          * @throws IllegalArgumentException if the {@code Retainable}
          * {@link Retainable#canRetain() cannot be retained}
+         * @see #retainAndCreate(ByteBuffer, boolean, Retainable)
          */
-        static Chunk from(ByteBuffer byteBuffer, boolean last, Retainable retainable)
+        static Chunk createFromRetained(ByteBuffer byteBuffer, boolean last, Retainable retainable)
+        {
+            if (!retainable.canRetain())
+                throw new IllegalArgumentException("Cannot create chunk from non-retainable " + retainable);
+            if (byteBuffer.hasRemaining())
+                return new ByteBufferChunk.WithRetainable(byteBuffer, last, Objects.requireNonNull(retainable));
+            retainable.release();
+            return last ? EOF : EMPTY;
+        }
+
+        /**
+         * <p>Creates a last/non-last Chunk with the given ByteBuffer, linked to the given {@link Retainable}.</p>
+         * <p>The given Retainable is retained, and the {@link #retain()} and {@link #release()} methods of
+         * this Chunk will delegate to the given Retainable.</p>
+         * <p>Use this method when the Retainable is not already retained.</p>
+         *
+         * @param byteBuffer the ByteBuffer with the bytes of this Chunk
+         * @param last whether the Chunk is the last one
+         * @param retainable the Retainable this Chunk links to
+         * @return a new Chunk
+         * @throws IllegalArgumentException if the {@code Retainable}
+         * {@link Retainable#canRetain() cannot be retained}
+         * @see #createFromRetained(ByteBuffer, boolean, Retainable)
+         */
+        static Chunk retainAndCreate(ByteBuffer byteBuffer, boolean last, Retainable retainable)
         {
             if (!retainable.canRetain())
                 throw new IllegalArgumentException("Cannot create chunk from non-retainable " + retainable);
@@ -575,7 +600,7 @@ public class Content
          * </ul>
          * <p>If the source has remaining bytes, the returned {@code Chunk} retains
          * the source {@code Chunk} and it is linked to it via
-         * {@link #from(ByteBuffer, boolean, Retainable)}.</p>
+         * {@link #retainAndCreate(ByteBuffer, boolean, Retainable)}.</p>
          *
          * @return a new {@code Chunk} retained from the source {@code Chunk} with a slice
          * of the source {@code Chunk}'s {@code ByteBuffer}
@@ -583,7 +608,7 @@ public class Content
         default Chunk slice()
         {
             if (hasRemaining())
-                return from(getByteBuffer().slice(), isLast(), this);
+                return retainAndCreate(getByteBuffer().slice(), isLast(), this);
             else
                 return isLast() ? this : EMPTY;
         }
@@ -600,7 +625,7 @@ public class Content
          * returned depending on the value of {@code last}.</p>
          * <p>If the source has remaining bytes, the returned {@code Chunk} retains
          * the source {@code Chunk} and it is linked to it via
-         * {@link #from(ByteBuffer, boolean, Retainable)}.</p>
+         * {@link #retainAndCreate(ByteBuffer, boolean, Retainable)}.</p>
          *
          * @param position the position at which the slice begins
          * @param limit the limit at which the slice ends
@@ -622,7 +647,7 @@ public class Content
                 ByteBuffer slice = sourceBuffer.slice();
                 sourceBuffer.limit(sourceLimit);
                 sourceBuffer.position(sourcePosition);
-                return from(slice, last, this);
+                return retainAndCreate(slice, last, this);
             }
             else
             {

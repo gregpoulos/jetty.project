@@ -243,8 +243,7 @@ public class HttpStreamOverHTTP2 implements HttpStream, HTTP2Channel.Server
         DataFrame frame = data.frame();
         if (frame.isEndStream() && frame.remaining() == 0)
             return Content.Chunk.EOF;
-        // Implicit retain because we are passing the ByteBuffer to the Chunk.
-        return Content.Chunk.from(frame.getData(), frame.isEndStream(), data);
+        return Content.Chunk.retainAndCreate(frame.getData(), frame.isEndStream(), data);
     }
 
     @Override

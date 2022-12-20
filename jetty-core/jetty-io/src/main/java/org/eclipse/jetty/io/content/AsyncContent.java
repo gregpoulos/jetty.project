@@ -88,8 +88,7 @@ public class AsyncContent implements Content.Sink, Content.Source, Closeable
     {
         if (chunk.canRetain())
         {
-            // Implicit retain that will be paired with the release done by the reader.
-            chunk = Content.Chunk.from(chunk.getByteBuffer(), chunk.isLast(), new Retainable.Wrapper(chunk)
+            chunk = Content.Chunk.retainAndCreate(chunk.getByteBuffer(), chunk.isLast(), new Retainable.Wrapper(chunk)
             {
                 @Override
                 public boolean release()

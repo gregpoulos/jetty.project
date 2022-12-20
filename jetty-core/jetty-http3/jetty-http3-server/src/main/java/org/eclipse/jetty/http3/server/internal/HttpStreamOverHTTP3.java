@@ -235,8 +235,7 @@ public class HttpStreamOverHTTP3 implements HttpStream
     {
         if (data == Stream.Data.EOF)
             return Content.Chunk.EOF;
-        // Implicit retain because we are passing the ByteBuffer to the Chunk.
-        return Content.Chunk.from(data.getByteBuffer(), data.isLast(), data);
+        return Content.Chunk.retainAndCreate(data.getByteBuffer(), data.isLast(), data);
     }
 
     @Override

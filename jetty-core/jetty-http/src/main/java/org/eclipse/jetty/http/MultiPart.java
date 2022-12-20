@@ -635,16 +635,9 @@ public class MultiPart
                         yield chunk;
                     state = State.MIDDLE;
                     if (chunk.hasRemaining())
-                    {
-                        Content.Chunk wrapped = Content.Chunk.from(chunk.getByteBuffer(), false, chunk);
-                        chunk.release();
-                        yield wrapped;
-                    }
-                    else
-                    {
-                        chunk.release();
-                        yield Content.Chunk.EMPTY;
-                    }
+                        yield Content.Chunk.createFromRetained(chunk.getByteBuffer(), false, chunk);
+                    chunk.release();
+                    yield Content.Chunk.EMPTY;
                 }
                 case COMPLETE -> Content.Chunk.EOF;
             };
