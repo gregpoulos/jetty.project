@@ -376,7 +376,7 @@ public class CachingHttpContentFactory implements HttpContent.Factory
         @Override
         public ByteBuffer getByteBuffer()
         {
-            return _buffer == null ? null : _buffer.duplicate();
+            return _buffer == null ? null : _buffer.asReadOnlyBuffer();
         }
 
         @Override
