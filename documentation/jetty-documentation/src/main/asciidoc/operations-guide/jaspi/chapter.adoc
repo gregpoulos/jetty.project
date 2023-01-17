@@ -26,7 +26,6 @@ Only modules conforming to the "Servlet Container Profile" with the ServerAuthMo
 
 Enable the `jaspi` module:
 
-[subs=attributes]
 ----
 include::{jetty-home}/modules/{ee-current}-jaspi.mod[]
 ----
@@ -67,7 +66,6 @@ Jetty provides an implementation of the `AuthConfigFactory` interface which is u
 This custom module must reference an XML file which sets a new instance of the `AuthConfigFactory` with the static method `AuthConfigFactory.setFactory()`.
 For an example of this see the `{ee-current}-jaspi-default-auth-config-factory` module, which provides the default implementation used by Jetty.
 
-[subs=attributes]
 ----
 include::{jetty-home}/modules/{ee-current}-jaspi-default-auth-config-factory.mod[]
 ----
