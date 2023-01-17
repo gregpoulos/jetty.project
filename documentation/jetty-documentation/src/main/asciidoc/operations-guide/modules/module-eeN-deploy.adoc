@@ -23,6 +23,7 @@ Adding files or directories to this monitored directory will cause the `Deployme
 (You can find a more detailed discussion of these rules in the xref:og-deploy-rules[deployment rules] section.)
 
 Multiple versions of this module exist (`{ee-all}-deploy`) to support each Jakarta EE platform's version of the Java Servlet specification.
+module-eeN-deploy.adoc)
 Jetty's configuration properties are nearly identical across these versions; the configuration properties for the `{ee-current}-deploy` Jetty module are:
 
 ----
